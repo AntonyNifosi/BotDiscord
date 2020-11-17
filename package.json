@@ -1,0 +1,16 @@
+{
+  "name": "project_bot",
+  "version": "1.0.0",
+  "description": "Mon premier discord bot",
+  "main": "bot.js",
+  "author": "Ton nom",
+  "dependencies": {
+    "discord.io": "^2.5.3",
+    "discord.js": "^12.4.1",
+    "winston": "^3.3.3"
+  },
+  "scripts": {
+    "test": "test"
+  },
+  "license": "ISC"
+}
