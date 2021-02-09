@@ -10,18 +10,17 @@ let playersReactions = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '
 let isRunning = false;
 let votingTime = false;
 let round = 0;
-let nbRound = 4;
+let nbRound = 3;
 let goodWord = "baleine";
 let badWord = "requin";
 
 // Set the prefix
 let prefix = config.prefix;
 
-function Player(user, locked, react) {
+function Player(user, locked) {
     this.user = user;
     this.locked = locked;
-    this.react = react;
-    this.hasVoted = false;
+    this.voteChoice = null;
     this.vote = 0;
 }
 
@@ -67,7 +66,7 @@ client.on("message", (message) => {
                 }
                 else {
                     message.delete();
-                    message.channel.send(message.author.toString() + " envoyez ce message en privé !")
+                    message.channel.send(message.author.toString() + " envoyez ce message dans le channel !")
                 }
                 break;
         }
@@ -79,9 +78,10 @@ client.login(config.token);
 
 function playerRecovery(channel, id) {
     let msg_channel = channel;
+
     client.on("messageReactionAdd", (reaction, user) => {
         if (reaction.message.id === id && user.username != "BOT IAE") {
-            playersList.push(new Player(user, false, playersReactions[playersList.length]));
+            playersList.push(new Player(user, false));
             msg_channel.send(user.toString() + " participera pour la prochaine partie de l'undercover !");
         }
     })
@@ -98,6 +98,7 @@ function startGame() {
     round = 0;
     let win = false;
     impostor = playersList[0];
+
     console.log("Imposteur : " + impostor.user.username);
     impostor.user.send("Voici votre mot : " + badWord);
     playersList.filter(player => player !== impostor).forEach(player => player.user.send("Voici votre mot : " + goodWord));
@@ -108,7 +109,7 @@ function processWord(player, word) {
         console.log(player.user.username + " a déjà rentré un mot");
     else {
         player.locked = true;
-        playersAnswers.push(player.user.username.toString() + " a écrit le mot : " + word.split(" ")[1]);
+        playersAnswers.push(player.user.toString() + " a écrit le mot : " + word.split(" ")[1]);
         if (playersAnswers.length >= playersList.length)
             endOfRound();
     }
@@ -116,7 +117,9 @@ function processWord(player, word) {
 
 function endOfRound() {
     round++;
+
     playersAnswers.forEach(message => channel.send(message));
+
     if (round >= nbRound) {
         channel.send("Fin du round " + round + "\nIl est temps de voter ! Réagissez pour la personne qui serait l'imposteur");
         votingTime = true;
@@ -133,55 +136,83 @@ function endOfRound() {
 
 function votingChoice() {
     let msg = "";
-    playersList.forEach(p => msg += (p.react + " : " + p.user.username.toString() + " "));
-    channel.send("Voter pour l'imposteur de votre choix, une fois le vote fini appuyer sur ✅\n" + msg).then(function (sentMessage) {
+    let i = 0;
+
+    playersList.forEach(p => {
+        p.react = playersReactions[i];
+        msg += (p.react + " : " + p.user.toString() + " ")
+        i++;
+    });
+
+    channel.send("Voter pour l'imposteur de votre choix\n" + msg).then(function (sentMessage) {
         playersList.forEach(p => sentMessage.react(p.react));
-        sentMessage.react('✅');
         votingProcess(sentMessage.id);
     }).catch((e) => console.error('emoji failed to react.' + e));
-
 }
 
 function votingProcess(id) {
+    let count = 0;
 
     client.on("messageReactionAdd", (reaction, user) => {
-        if (reaction.message.id === id && user.username != "BOT IAE" && reaction.emoji.toString() != '✅') {
-            user.hasVoted = true;
-            playersList.forEach(p => console.log(p.hasVoted));
-            let playerVoted = playersList.find(player => player.react === reaction.emoji.toString());
-            console.log(user.username.toString() + " a voté pour " + playerVoted.user.username.toString());
-            playerVoted.vote++;
-        }
+        if (reaction.message.id === id && user.username != "BOT IAE") {
+            let p = playersList.find(p => p.user === user);
+            /* Si le joueur n'a jamais voté */
+            if (!p.voteChoice) {
 
-        if (reaction.message.id === id && reaction.emoji.toString() === '✅' && user.username != "BOT IAE") {
-            if (reaction.count >= playersList.length + 1) {
-                let msg = "";
-                let voteMax = 0;
-                let playerChoosen;
-                playersList.forEach(player => {
-                    msg += player.user.username.toString() + " a reçu " + player.vote + " vote(s)\n";
-                    if (player.vote > voteMax) {
-                        voteMax = player.vote;
-                        playerChoosen = player;
+                let playerVoted = playersList.find(player => player.react === reaction.emoji.toString());
+                p.voteChoice = playerVoted;
+                console.log(user.username.toString() + " a voté pour " + playerVoted.user.username.toString());
+                playerVoted.vote++;
+                if (++count >= playersList.length) {
+                    let msg = "";
+                    let voteMax = 0;
+                    let playerChoosen;
+
+                    playersList.forEach(player => {
+                        msg += player.user.toString() + " a reçu " + player.vote + " vote(s)\n";
+
+                        if (player.vote > voteMax) {
+                            voteMax = player.vote;
+                            playerChoosen = player;
+                        }
+                    });
+
+                    channel.send("Vote terminé !\nRésultats :\n" + msg);
+                    channel.send(playerChoosen.user.toString() + " a été désigné Imposteur !");
+
+                    if (playerChoosen === impostor) {
+                        channel.send("Bien joué ! L'imposteur était bien " + impostor.user.toString());
                     }
-                });
-                channel.send("Vote terminé !\nRésultats :\n" + msg);
-                channel.send(playerChoosen.user.username.toString() + " a été désigné Imposteur !");
-                if (playerChoosen === impostor) {
-                    channel.send("Bien joué ! L'imposteur était bien " + impostor.user.username.toString());
+                    else {
+                        channel.send("Dommage ! L'imposteur était " + impostor.user.toString());
+                    }
                 }
-                else {
-                    channel.send("Dommage ! L'imposteur était " + impostor.user.username.toString());
-                }
+            }
+            /* Si le joueur a deja vote on enleve le vote */
+            else {
+                reaction.users.remove(user);
+                channel.send(user.toString() + " vous ne pouvez pas voter pour deux personnes différentes !");
             }
         }
     })
 
     client.on("messageReactionRemove", (reaction, user) => {
-        if (reaction.message.id === id && user.username !== "BOT IAE" && reaction.emoji.toString() !== '✅') {
+        if (reaction.message.id === id && user.username !== "BOT IAE") {
+
+            let p = playersList.find(p => p.user == user);
             let playerVoted = playersList.find(player => player.react === reaction.emoji.toString());
-            console.log(user.username.toString() + " a enlevé son vote pour " + playerVoted.user.username.toString());
-            playerVoted.vote--;
+
+            if (p.voteChoice === playerVoted) {
+
+                console.log(user.username.toString() + " a enlevé son vote pour " + playerVoted.user.username.toString());
+
+                playerVoted.vote--;
+                p.voteChoice = null;
+                count--;
+            }
+            else {
+                console.log("Le bot a enlevé un vote");
+            }
         }
     })
 }
