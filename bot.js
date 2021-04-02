@@ -11,9 +11,12 @@ let playersReactions = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '
 let isRunning = false;
 let isStarted = false;
 let round = 0;
-let nbRound = 1;
 let goodWord = "";
 let badWord = "";
+
+// Configuration
+let nbRound = 2;
+let minPlayer = 1;
 
 // Set the prefix
 let prefix = config.prefix;
@@ -37,6 +40,7 @@ client.on("message", (message) => {
 
             case "undercover":
                 if (!isRunning) {
+                    initParty();
                     channel = message.channel;
                     message.channel.send("@everyone Réagissez au message ci-dessous pour participer à la partie").then(function (sentMessage) {
                         sentMessage.react('👍');
@@ -50,7 +54,7 @@ client.on("message", (message) => {
                 break;
 
             case "start":
-                if (playersList.length >= 1) {
+                if (playersList.length >= minPlayer) {
 
                     isStarted = true;
                     startGame();
@@ -66,20 +70,29 @@ client.on("message", (message) => {
                 break;
 
             case "word":
-                if (message.channel.name != null) {
-                    let player = playersList.find(player => player.user === message.author);
-                    if (player != null) {
-                        console.log("Processing word ..." + player.user.username.toString());
-                        processWord(player, message.content.split(" ").join(" "));
+                if (isRunning) {
+                    if (message.channel.name != null) {
+                        let player = playersList.find(player => player.user === message.author);
+                        if (player != null) {
+                            console.log("Processing word ..." + player.user.username.toString());
+                            processWord(player, message.content.split(" ").join(" "));
+                        }
+                        else {
+                            message.channel.send(message.author.toString() + " vous ne participez pas à la partie !");
+                        }
                     }
                     else {
-                        message.channel.send(message.author.toString() + " vous ne participez pas à la partie !");
+                        message.delete();
+                        message.channel.send(message.author.toString() + " envoyez ce message dans le channel !")
                     }
                 }
                 else {
-                    message.delete();
-                    message.channel.send(message.author.toString() + " envoyez ce message dans le channel !")
+                    message.channel.send(message.author.toString() + " aucune partie n'est encore lancée !");
                 }
+                break;
+
+            case "profile":
+                checkProfile(message.author, message.channel);
                 break;
         }
     }
@@ -88,7 +101,17 @@ client.on("message", (message) => {
 
 client.login(config.token);
 
-async function getAPIRemi() {
+function initParty() {
+    isRunning = false;
+    isStarted = false;
+    round = 0;
+    goodWord = "";
+    badWord = "";
+    playersList = [];
+    playersAnswers = [];
+}
+
+async function getAPIWords() {
     let resp;
     await fetch('http://127.0.0.1:5000/wordpair', {
     }).then((res) => {
@@ -99,12 +122,53 @@ async function getAPIRemi() {
     return resp;
 }
 
+async function getAPIProfile(userId) {
+    let resp;
+    await fetch('http://127.0.0.1:5000/user/' + userId, {
+    }).then((res) => {
+        if (res.status == 200)
+            return res.json();
+        else
+            return null;
+    }).then((res) => {
+        resp = res;
+    });
+    return resp;
+}
+
+async function checkProfile(user, channel) {
+    console.log("ID du profil : " + user.id + user.username);
+    let request = await getAPIProfile(user.id);
+
+    /* Si le profil existe */
+    if (request != null) {
+        console.log(request);
+        channel.send(user.toString() + "\n🕵️‍♂️ Victoire en tant que non imposteur : " + request.bystander_victory + "\n🧛‍♂️ Victoire en tant qu'imposteur : " + request.undercover_victory);
+    }
+    /* Si le profil n'existe pas */
+    else {
+       await createProfile(user);
+       checkProfile(user, channel);
+    }
+}
+
+async function createProfile(user) {
+    const requestOptions =
+    {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ u_id: user.id, username : user.username + "#" +  user.discriminator }),
+    };
+    await fetch('http://127.0.0.1:5000/user/', requestOptions)
+}
 
 function playerRecovery(channel, id) {
     let msg_channel = channel;
 
     client.on("messageReactionAdd", (reaction, user) => {
-        if (!isStarted && reaction.emoji.name == '👍' && reaction.message.id === id && user.username != "BOT IAE") {
+        if (!isStarted && reaction.emoji.name == '👍' && reaction.message.id === id && user.username != "BOT IAE" && playersList.length <= playersReactions.length) {
             playersList.push(new Player(user, false));
             msg_channel.send(user.toString() + " participera pour la prochaine partie de l'undercover !");
         }
@@ -127,7 +191,7 @@ async function startGame() {
     round = 0;
     let win = false;
     impostor = playersList[getRandomInt(playersList.length)];
-    APIWords = await getAPIRemi();
+    APIWords = await getAPIWords();
     badWord = APIWords.undercover_word;
     goodWord = APIWords.bystander_word;
 
@@ -202,10 +266,23 @@ function votingProcess(id) {
                         let msg = "";
                         let voteMax = 0;
                         let playerChoosen;
+                        let pWin = [];
+                        let pLoose = [];
 
                         playersList.forEach(player => {
                             msg += player.user.toString() + " a reçu " + player.vote + " vote(s)\n";
+                            
+                            /* Si le joueur a bien voté pour l'imposteur il a gagné */
+                            if (player.voteChoice === impostor) {
+                                pWin.push(player.user);
+                            }
 
+                            /* Sinon il a voté pour la mauvaise personne et a donc perdu */
+                            else {
+                                pLoose.push(player.user);
+                            }
+                            
+                            /* On vérifie si le joueur actuel est celui qui a obtenu le plus de vote */
                             if (player.vote > voteMax) {
                                 voteMax = player.vote;
                                 playerChoosen = player;
@@ -221,7 +298,18 @@ function votingProcess(id) {
                         else {
                             channel.send("Dommage ! L'imposteur était " + impostor.user.toString());
                         }
+                        let winMsg = "Les gagnants sont : ";
+                        let looseMsg = "Les perdants sont : ";
+                        pWin.forEach(p => {
+                            winMsg += p.toString();
+                        })
+                        pLoose.forEach(p => {
+                            looseMsg += p.toString();
+                        })
+                        channel.send(winMsg);
+                        channel.send(looseMsg);
                     }
+                    isRunning = false;
                 }
                 /* Si le joueur a deja vote on enleve le vote */
                 else {
