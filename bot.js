@@ -15,7 +15,7 @@ let goodWord = "";
 let badWord = "";
 
 // Configuration
-let nbRound = 2;
+let nbRound = 3;
 let minPlayer = 1;
 
 // Set the prefix
@@ -29,7 +29,7 @@ function Player(user, locked) {
 }
 
 
-client.on("message", (message) => {
+client.on("message", async function (message) {
     // Exit and stop if the prefix is not there or if user is a bot
     if (!message.content.startsWith(prefix) || message.author.bot) return;
     else {
@@ -92,7 +92,7 @@ client.on("message", (message) => {
                 break;
 
             case "profile":
-                checkProfile(message.author, message.channel);
+                message.channel.send(await getProfile(message.author));
                 break;
         }
     }
@@ -136,19 +136,19 @@ async function getAPIProfile(userId) {
     return resp;
 }
 
-async function checkProfile(user, channel) {
+async function getProfile(user) {
     console.log("ID du profil : " + user.id + user.username);
     let request = await getAPIProfile(user.id);
 
     /* Si le profil existe */
     if (request != null) {
         console.log(request);
-        channel.send(user.toString() + "\n🕵️‍♂️ Victoire en tant que non imposteur : " + request.bystander_victory + "\n🧛‍♂️ Victoire en tant qu'imposteur : " + request.undercover_victory);
+        return (user.toString() + "\n🕵️‍♂️ Victoire en tant que non imposteur : " + request.bystander_victory + "\n🧛‍♂️ Victoire en tant qu'imposteur : " + request.undercover_victory);
     }
     /* Si le profil n'existe pas */
     else {
-       await createProfile(user);
-       checkProfile(user, channel);
+        await createProfile(user);
+        return await getProfile(user, channel);
     }
 }
 
@@ -159,9 +159,24 @@ async function createProfile(user) {
         headers: {
             'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ u_id: user.id, username : user.username + "#" +  user.discriminator }),
+        body: JSON.stringify({ u_id: user.id, username: user.username + "#" + user.discriminator }),
     };
     await fetch('http://127.0.0.1:5000/user/', requestOptions)
+}
+
+async function updateProfile(user, winType) {
+
+    await getProfile(user);
+
+    const requestOptions =
+    {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ win_type: winType }),
+    };
+    await fetch('http://127.0.0.1:5000/user/' + user.id + "/win", requestOptions)
 }
 
 function playerRecovery(channel, id) {
@@ -271,17 +286,20 @@ function votingProcess(id) {
 
                         playersList.forEach(player => {
                             msg += player.user.toString() + " a reçu " + player.vote + " vote(s)\n";
-                            
-                            /* Si le joueur a bien voté pour l'imposteur il a gagné */
-                            if (player.voteChoice === impostor) {
-                                pWin.push(player.user);
+
+                            if (player.user != impostor.user) {
+
+                                /* Si le joueur a bien voté pour l'imposteur il a gagné */
+                                if (player.voteChoice === impostor) {
+                                    pWin.push(player.user);
+                                }
+
+                                /* Sinon il a voté pour la mauvaise personne et a donc perdu */
+                                else {
+                                    pLoose.push(player.user);
+                                }
                             }
 
-                            /* Sinon il a voté pour la mauvaise personne et a donc perdu */
-                            else {
-                                pLoose.push(player.user);
-                            }
-                            
                             /* On vérifie si le joueur actuel est celui qui a obtenu le plus de vote */
                             if (player.vote > voteMax) {
                                 voteMax = player.vote;
@@ -293,18 +311,24 @@ function votingProcess(id) {
                         channel.send(playerChoosen.user.toString() + " a été désigné Imposteur !");
 
                         if (playerChoosen === impostor) {
-                            channel.send("Bien joué ! L'imposteur était bien " + impostor.user.toString());
+                            channel.send("Victoire des innocents ! L'imposteur était bien " + impostor.user.toString());
+                            pLoose.push(impostor.user);
                         }
                         else {
-                            channel.send("Dommage ! L'imposteur était " + impostor.user.toString());
+                            channel.send("Victoire de l'imposteur ! L'imposteur était " + impostor.user.toString());
+                            pWin.push(impostor.user);
+                            updateProfile(impostor.user, "undercover_victory");
                         }
+
                         let winMsg = "Les gagnants sont : ";
                         let looseMsg = "Les perdants sont : ";
                         pWin.forEach(p => {
-                            winMsg += p.toString();
+                            winMsg += p.toString() + " - ";
+                            if (p != impostor.user)
+                                updateProfile(p, "bystander_victory");
                         })
                         pLoose.forEach(p => {
-                            looseMsg += p.toString();
+                            looseMsg += p.toString() + " - ";
                         })
                         channel.send(winMsg);
                         channel.send(looseMsg);
