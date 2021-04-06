@@ -11,11 +11,12 @@ let playersReactions = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '
 let isRunning = false;
 let isStarted = false;
 let round = 0;
+let startingMsg;
 let goodWord = "";
 let badWord = "";
 
 // Configuration
-let nbRound = 3;
+let nbRound = 1;
 let minPlayer = 1;
 
 // Set the prefix
@@ -44,6 +45,7 @@ client.on("message", async function (message) {
                     channel = message.channel;
                     message.channel.send("@everyone Réagissez au message ci-dessous pour participer à la partie").then(function (sentMessage) {
                         sentMessage.react('👍');
+                        startingMsg = sentMessage;
                         playerRecovery(sentMessage.channel, sentMessage.id);
                     }).catch((e) => console.error('emoji failed to react.' + e));
                     isRunning = true;
@@ -54,13 +56,19 @@ client.on("message", async function (message) {
                 break;
 
             case "start":
-                if (playersList.length >= minPlayer) {
-
-                    isStarted = true;
-                    startGame();
+                if (!isStarted) {
+                    if (playersList.length >= minPlayer) {
+                        isStarted = true;
+                        startGame();
+                    }
+                    else {
+                        message.channel.send("Pas assez de joueur inscrit !");
+                    }     
                 }
-                else
-                    message.channel.send("Pas assez de joueur inscrit !");
+                else {
+                    message.channel.send("La partie est déjà démarrée !");
+                }
+
                 break;
 
             case "clear":
@@ -70,12 +78,12 @@ client.on("message", async function (message) {
                 break;
 
             case "word":
-                if (isRunning) {
+                if (isStarted) {
                     if (message.channel.name != null) {
                         let player = playersList.find(player => player.user === message.author);
                         if (player != null) {
                             console.log("Processing word ..." + player.user.username.toString());
-                            processWord(player, message.content.split(" ").join(" "));
+                            processWord(player, message.content.split(" ").join(" "), message);
                         }
                         else {
                             message.channel.send(message.author.toString() + " vous ne participez pas à la partie !");
@@ -102,6 +110,9 @@ client.on("message", async function (message) {
 client.login(config.token);
 
 function initParty() {
+    if (startingMsg)
+        startingMsg.delete();
+        
     isRunning = false;
     isStarted = false;
     round = 0;
@@ -203,6 +214,7 @@ function getRandomInt(max) {
 }
 
 async function startGame() {
+    playersList.forEach(p => console.log(p.user.username));
     round = 0;
     let win = false;
     impostor = playersList[getRandomInt(playersList.length)];
@@ -217,9 +229,11 @@ async function startGame() {
     playersList.filter(player => player !== impostor).forEach(player => player.user.send("Voici votre mot : " + goodWord));
 }
 
-function processWord(player, word) {
-    if (player.locked)
+function processWord(player, word, message) {
+    if (player.locked) {
+        message.delete();
         console.log(player.user.username + " a déjà rentré un mot");
+    }
     else {
         player.locked = true;
         playersAnswers.push(player.user.toString() + " a écrit le mot : " + word.split(" ")[1]);
@@ -253,7 +267,7 @@ function votingChoice() {
 
     playersList.forEach(p => {
         p.react = playersReactions[i];
-        msg += (p.react + " : " + p.user.toString() + " ")
+        msg += (p.react + " : " + p.user.toString() + "   ")
         i++;
     });
 
@@ -319,7 +333,8 @@ function votingProcess(id) {
                             pWin.push(impostor.user);
                             updateProfile(impostor.user, "undercover_victory");
                         }
-
+                        channel.send("Le mot des innoncents était : " + goodWord);
+                        channel.send("Le mot de l'imposteur était : " + badWord);
                         let winMsg = "Les gagnants sont : ";
                         let looseMsg = "Les perdants sont : ";
                         pWin.forEach(p => {
@@ -332,8 +347,8 @@ function votingProcess(id) {
                         })
                         channel.send(winMsg);
                         channel.send(looseMsg);
+                        isRunning = false;
                     }
-                    isRunning = false;
                 }
                 /* Si le joueur a deja vote on enleve le vote */
                 else {
