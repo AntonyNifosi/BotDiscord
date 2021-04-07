@@ -16,7 +16,7 @@ let goodWord = "";
 let badWord = "";
 
 // Configuration
-let nbRound = 1;
+let nbRound = 3;
 let minPlayer = 1;
 
 // Set the prefix
