@@ -10,7 +10,7 @@ Une fois les 3 tours finis les joueurs passeront au vote pour choisir la personn
 
 ## Conditions de victoire :
 Si le joueur désigné imposteur n'a pas obtenu la majorité des votes ce dernier gagne une victoire d'imposteur.
-Si le joueur a voté pour l'imposteur il remporte une victoire en tant qu'innoncent.
+Si le joueur a voté pour l'imposteur il remporte une victoire en tant qu'innocent (si l'imposteur vote pour lui rien ne se passera de son côté).
 
 ## Commandes disponibles :
 
