@@ -14,11 +14,11 @@ Si le joueur a voté pour l'imposteur il remporte une victoire en tant qu'innonc
 
 ## Commandes disponibles :
 
- - !undercover : Permet de créer le salon d'une partie
- - !start : Permet de lancer une partie avec les joueurs ayant rejoint le salon de la partie
- - !word + "mot" : Permet de valider un mot pour le tour actuel
- - !profile : Permet d'afficher son profil de joueur avec les victoires en tant qu'innoncent et en tant qu'imposteur
- - !clear : Supprimer les 100 derniers messages du channel
+ - `!undercover` : Permet de créer le salon d'une partie
+ - `!start` : Permet de lancer une partie avec les joueurs ayant rejoint le salon de la partie
+ - `!word` + "mot" : Permet de valider un mot pour le tour actuel
+ - `!profile` : Permet d'afficher son profil de joueur avec les victoires en tant qu'innoncent et en tant qu'imposteur
+ - `!clear` : Supprimer les 100 derniers messages du channel
 
 Bonne change ! :)
 
